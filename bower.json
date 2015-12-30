@@ -1,15 +1,21 @@
 {
   "name": "apLamb",
-  "version": "2.0.0",
-  "main": [
-    "dist/apLamb.js",
-  ],
-  "authors": [
-    "Alvin Pivowar (alvin@ng-al.com)",
-  ],
+  "description": "Little Angular Message Bus",
   "homepage": "http://www.ng-al.com",
+  "authors": [
+    "Alvin Pivowar (alvin@ng-al.com)"
+  ],
+  "version": "2.0.0",
   "license": "BSD",
+  "main": [
+    "dist/apLamb.js"
+  ],
   "dependencies": {
-    "angular": "^1.2.0",
-  }
+    "angular": ">=1.2.0"
+  },
+  "moduleType": [],
+  "keywords": [
+    "Angular",
+    "Messaging"
+  ]
 }
