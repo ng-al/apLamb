@@ -14,6 +14,7 @@
     "angular": ">=1.2.0"
   },
   "moduleType": [],
+  "ignore": [],
   "keywords": [
     "Angular",
     "Messaging"
