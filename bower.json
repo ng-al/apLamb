@@ -1,0 +1,15 @@
+{
+  "name": "apLamb",
+  "version": "2.0.0",
+  "main": [
+    "dist/apLamb.js",
+  ],
+  "authors": [
+    "Alvin Pivowar (alvin@ng-al.com)",
+  ],
+  "homepage": "http://www.ng-al.com",
+  "license": "BSD",
+  "dependencies": {
+    "angular": "^1.2.0",
+  }
+}
