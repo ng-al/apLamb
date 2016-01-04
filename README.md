@@ -71,7 +71,7 @@ Wildcards can also be used with publishing.  For example, if a subscriber regist
 
 * "authentication.user.change.*" will match.
 * "authentication.user.*.123" will match.
-* "\*.change.*" will match.
+* "authentication.\*.change.*" will match.
 * "authentication.user.create.*" will not match.
 
 Note that using wildcards for **both** publishing and subscribing can have suprising results!
