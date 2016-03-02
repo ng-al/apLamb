@@ -15,7 +15,6 @@
 
     angular.module("apLamb", []);
 
-    //noinspection JSUnusedLocalSymbols
     angular
         .module("apLamb")
         .run(
@@ -23,7 +22,6 @@
         function($q, $rootScope, lambConfigService) {
             if (! angular.isPromise) {
                 angular.isPromise = function(obj) {
-                    //noinspection JSUnusedLocalSymbols
                     return (obj && obj.then && String(obj.then) === String($q(function(accept, reject) {accept();}).then));
                 }
             }
@@ -98,7 +96,6 @@
             };
         }]);
 
-    //noinspection JSUnusedLocalSymbols
     function LambConfig(logLevel, socks) {
         this.logLevel = logLevel;   // default: "None"
         this.socks = socks;         // default: null, but default sock protocol, host, and port default to server that
@@ -122,14 +119,17 @@
 
                 // Private Service Methods
 
-                $rootScope.$on(LAMB_BUS, function (event, /*Message*/message) {
+                $rootScope.$on(LAMB_BUS, function (event, message) {
                     var callbackCount = 0;
-                    var topicMatches;
+                    var pubTopic = new TopicMatcher(message.publisher.topic);
 
                     angular.forEach(subscribers, function (subscriber) {
+                        var subTopic;
+
                         if (subscriber.subscriberId !== message.publisher.publisherId) {
-                            topicMatches = message.getTopicMatches(message.publisher, subscriber);
-                            if (topicMatches) {
+                            subTopic = new TopicMatcher(subscriber.topic);
+
+                            if (TopicMatcher.isMatch(pubTopic, subTopic)) {
                                 if (lambConfigService.getLogLevel() === lambConfigService.LogLevelEnum.VERBOSE) {
                                     $log.debug(
                                         "lamb: " +
@@ -138,7 +138,14 @@
                                     );
                                 }
 
-                                subscriber.callbackFn(message.data, new MessageInfo(message.publisher, subscriber, topicMatches, message.data));
+                                subscriber.callbackFn(message.data, new MessageInfo(
+                                    message.publisher,
+                                    subscriber,
+                                    (pubTopic.hasWild() && !subTopic.hasWild())
+                                        ? TopicMatcher.result.topic1.captured
+                                        : TopicMatcher.result.topic2.captured,
+                                    message.data));
+
                                 ++callbackCount;
                             }
                         }
@@ -303,8 +310,6 @@
        Message: {
            data: Javascript object of the message contents
            publisher
-           
-           getTopicMatches(): Build an array of literals based on matching the message topic to the subscriber's pattern.
        }
      */
     function Message(publisher, data) {
@@ -312,42 +317,6 @@
         this.publisher = publisher;
     }
     
-    Message.prototype.getTopicMatches = function (publisher, subscriber) {
-        var i;
-        var publisherSubtopic;
-        var subscriberSubtopic;
-        var topicLength;
-        var topicMatches;
-
-        function getSubtopic(subtopics, index) {
-            if (index < subtopics.length) {
-                return subtopics[index];
-            } else if (subtopics[subtopics.length - 1] === "*") {
-                return "*";
-            } else {
-                return undefined;
-            }
-        }
-
-        function isMatch(subtopic1, subtopic2) {
-            if (! (subtopic1 && subtopic2)) return false;
-            if (subtopic1 === "*" || subtopic2 === "*") return true;
-            return (subtopic1 === subtopic2);
-        }
-
-        topicLength = Math.max(publisher.subtopics.length, subscriber.subtopics.length);
-        topicMatches = [];
-        for (i = 0; i < topicLength; ++i) {
-            publisherSubtopic = getSubtopic(publisher.subtopics, i);
-            subscriberSubtopic = getSubtopic(subscriber.subtopics, i);
-
-            if (!isMatch(publisherSubtopic, subscriberSubtopic)) return null;
-            topicMatches.push((publisherSubtopic !== "*") ? publisherSubtopic : subscriberSubtopic);
-        }
-
-        return topicMatches;
-    };
-
     /*
         MessageInfo: {
            data
@@ -378,13 +347,11 @@
     /*
        Publisher: {
            publisherId
-           subtopics:  An array of the parts of the topic (a.b.c => [a, b, c])
            topic
        }
      */
     function Publisher(publisherId, topic) {
         this.publisherId = publisherId;
-        this.subtopics = topic.split('.');
         this.topic = topic;
     }
 
@@ -392,14 +359,156 @@
        Subscriber: {
            callbackFn: Method to call when a matching message is received
            subscriberId: The identifier of the subscriber
-           subtopics:  An array of the parts of the topic (a.b.c => [a, b, c])
            topic
        }
      */
     function Subscriber(topic, subscriberId, callbackFn) {
         this.callbackFn = callbackFn;
         this.subscriberId = subscriberId;
-        this.subtopics = topic.split('.');
         this.topic = topic;
+    }
+
+    /*
+        TopicMatcher
+     */
+    function TopicMatcher(topicString) {
+        this.captured = [];
+        this.current = topicString.split('.');
+        this.topicString = topicString;
+    }
+
+    TopicMatcher.prototype = {
+        advance: function(capture, size) {
+            var i;
+
+            if (!this.atEnd()) {
+                this.captured.push(capture);
+                for (i = 0; i < (size || 1); ++i) {
+                    this.current.shift();
+                }
+            }
+        },
+
+        clone: function() {
+            var result = new TopicMatcher(this.topicString);
+            result.captured = this.captured.slice();
+            result.current = this.current.slice();
+            return result;
+        },
+
+        atEnd: function() {
+            return (this.current.length === 0);
+        },
+
+        currentItem: function(size) {
+            var i;
+            var result = "";
+
+            size = size || 1;
+            if (this.current.length < size)
+                return null;
+
+            for (i = 0; i < size; ++i) {
+                if (result.length > 0)
+                    result += ".";
+                result += this.current[i];
+            }
+
+            return result;
+        },
+
+        hasWild: function() {
+          return (this.topicString.indexOf("*") !== -1);
+        },
+
+        isCurrentWild: function() {
+            return (!this.atEnd() && this.current[0] === "*");
+        },
+
+        wildCandidateCount: function() {
+            var i;
+            var result = 0;
+
+            for (i = 0; i < this.current.length; ++i) {
+                if (i > 0 && this.current[i] === "*")
+                    return result;
+                ++result;
+            }
+
+            return result;
+        }
+    };
+
+    TopicMatcher.isMatch = function(topic1, topic2) {
+        var item1;
+        var item2;
+        var topic1Copy;
+        var topic2Copy;
+
+        // If neither topic string contains wildcards, they must match exactly.
+        if (!(topic1.hasWild || topic2.hasWild))
+            return (topic1.topicString === topic2.topicString);
+
+        // If both sides are at the end (and we haven't failed thus far), we have succeeded.
+        if (topic1.atEnd() && topic2.atEnd()) {
+            TopicMatcher.result = {
+                topic1: topic1,
+                topic2: topic2
+            };
+            return true;
+        }
+
+        // If the current part of the topicString is not wild (both sides), then they must match.
+        // Then, the remainder must match.
+        if (!(topic1.isCurrentWild() || topic2.isCurrentWild())) {
+            item1 = topic1.currentItem();
+            item2 = topic2.currentItem();
+            if (item1 !== item2)
+                return false;
+
+            topic1Copy = topic1.clone();
+            topic2Copy = topic2.clone();
+            topic1Copy.advance(item2);
+            topic2Copy.advance(item1);
+            return TopicMatcher.isMatch(topic1Copy, topic2Copy);
+        }
+
+        // One (or both) sides have wildcards.
+        // Use wildMatch()
+        return  (topic1.isCurrentWild() && TopicMatcher.wildMatch(topic1, topic2, false)) ||
+                (topic2.isCurrentWild() && TopicMatcher.wildMatch(topic2, topic1, true));
+    };
+
+    TopicMatcher.wildMatch = function(topic1, topic2, reverse) {
+        var i;
+        var item1;
+        var item2;
+        var topic1Copy;
+        var topic2Copy;
+
+        if (!topic1.isCurrentWild())
+            throw new Error("Internal error: Topic.wildMatch must have wild LHS");
+
+        // Wildcards in topic strings mean match 1 or more topic parts.
+        // Using the LHS as the pattern, try to match the RHS by consuming non-wildcard parts.
+        // (Leading wildcards in both sides match.)
+        for (i = 1; i <= topic2.wildCandidateCount(); ++i) {
+            topic1Copy = topic1.clone();
+            topic2Copy = topic2.clone();
+
+            item1 = topic1Copy.currentItem();
+            item2 = topic2Copy.currentItem(i);
+
+            topic1Copy.advance(item2);
+            topic2Copy.advance(item1, i);
+
+            if (!reverse && TopicMatcher.isMatch(topic1Copy, topic2Copy))
+                return true;
+
+            if (reverse && TopicMatcher.isMatch(topic2Copy, topic1Copy))
+                return true;
+        }
+
+        return false;
     }
 })();

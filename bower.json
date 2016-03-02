@@ -5,7 +5,7 @@
   "authors": [
     "Alvin Pivowar (alvin@ng-al.com)"
   ],
-  "version": "2.0.1",
+  "version": "2.1.0",
   "license": "BSD",
   "main": [
     "dist/apLamb.js"
